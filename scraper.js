@@ -8,32 +8,53 @@ const rl = require('readline').createInterface({
   output: process.stdout
 })
 
-const data = [];
-const toObject = async (ap) => {
-  data.push(ap);
-}
-
-const valueFilter = (type, value) => {
-  let auxValue = value;
-  switch (type) {
-    case 'value':
-      auxValue = (value) ? value.match(/\d.*\d/gm) : '0'
-      auxValue = Number(auxValue.toString().replace(/[.]/gm, ''));
+const zapData = [];
+const olxData = [];
+const toObject = (ap, site) => {
+  switch (site) {
+    case 'zap':
+      zapData.push(ap);
       break;
-    case 'area':
-      if (value) auxValue = Number(value.match(/\s(.\d\d)\s/gm));
-      break;
-    case 'desc':
-      auxValue = value.match(/\d/gm)[0];
+    case 'olx':
+      olxData.push(ap);
       break;
   }
+
+}
+
+const valueFilter = (type, value, site) => {
+  let auxValue = value;
+  switch (site) {
+    case 'zap': {
+      switch (type) {
+        case 'value':
+          auxValue = (value) ? value.match(/\d.*\d/gm) : '0'
+          auxValue = Number(auxValue.toString().replace(/[.]/gm, ''));
+          break;
+        case 'area':
+          if (value) auxValue = Number(value.match(/\s(.\d\d)\s/gm));
+          break;
+        case 'desc':
+          auxValue = value.match(/\d/gm)[0];
+          break;
+      }
+      break;
+    }
+    case 'olx': {
+      auxValue = auxValue.replace(/(\r\n|\n|\r)/gm, '');
+      auxValue = auxValue.replace(/\s+/g, ' ');
+      auxValue = auxValue.trim();
+      break;
+    }
+  }
+  
   return auxValue;
 };
 
-const scraper = async ($, page, filter) => {
+const zapScraper = ($, page, filter) => {
   let aluguel, condominio, area, quartos, vagas, localizacao, descricao = undefined;
 
-  $('.container').find('.card-container').each(async (index, elem) => {
+  $('.container').find('.card-container').each((index, elem) => {
     $(elem).find('.box--display-flex.box--flex-column.gutter-top-double.gutter-left-double.gutter-right-double.gutter-bottom-double.simple-card__box')
       .each((index, elem2) => {
         $(elem2).find('.collapse__content').each((index, descContainer) => {
@@ -41,23 +62,23 @@ const scraper = async ($, page, filter) => {
         });
 
         $(elem2).find('.simple-card__prices.simple-card__listing-prices').each((index, value) => {
-          aluguel = valueFilter('value', $(value).find('p').text());
+          aluguel = valueFilter('value', $(value).find('p').text(), 'zap');
           if (aluguel === 1) aluguel = Number(aluguel + '000');
 
-          condominio = valueFilter('value', $(value).find('span').text());
+          condominio = valueFilter('value', $(value).find('span').text(), 'zap');
 
           $(elem2).find('.simple-card__actions').each((index, location) => {
             localizacao = $(location).find('p').text();
             $(location).find('li').each((index, elem3) => {
               switch (elem3.attribs.class) {
                 case 'feature__item text-small js-areas':
-                  area = valueFilter('area', $(elem3).find('span:nth-child(2)').text());
+                  area = valueFilter('area', $(elem3).find('span:nth-child(2)').text(), 'zap');
                   break;
                 case 'feature__item text-small js-bedrooms':
-                  quartos = valueFilter('desc', $(elem3).find('span:nth-child(2)').text());
+                  quartos = valueFilter('desc', $(elem3).find('span:nth-child(2)').text(), 'zap');
                   break;
                 case 'feature__item text-small js-parking-spaces':
-                  vagas = valueFilter('desc', $(elem3).find('span:nth-child(2)').text());
+                  vagas = valueFilter('desc', $(elem3).find('span:nth-child(2)').text(), 'zap');
                   break;
                 default: break;
               }
@@ -77,46 +98,128 @@ const scraper = async ($, page, filter) => {
         vagas,
         page,
         //descricao
-      })
+      }, 'zap')
     }
   });
+}
 
+const olxScraper = ($, filter) => {
+  let link, valor, descricao, quartos, tamanho, vagas, condominio, localizacao = undefined;
+
+  $('#main-ad-list').find('li').each((index, elem) => {
+    link = ($(elem).find('a')[0]) ? $(elem).find('a')[0].attribs.href : undefined;
+
+    $(elem).find('div').each((index, elem2) => {
+      switch (elem2.attribs.class) {
+        case 'col-2':
+          descricao = valueFilter('type', $(elem2).find('h2').text(), 'olx');
+          let apAttributes = valueFilter('type', $(elem2).find('p').text(), 'olx');
+          apAttributes = apAttributes.split('|');
+          apAttributes.map(value => {
+            if (value.includes('quartos')) quartos = value.match(/.*quartos/gm);
+            if (value.includes('m²')) tamanho = value.match(/.*m²/gm);
+            if (value.includes('vaga')) vagas = value.match(/.*vagas/gm);
+            if (value.includes('R$')) condominio = value.match(/\d+/gm);
+            if (value.includes('Londrina')) localizacao = value.match(/Londrina.*/gm);
+          })
+          break;
+  
+        case 'col-3 ':
+          valor = valueFilter('type', $(elem2).find('.OLXad-list-price').text(), 'olx');
+          break;
+        default: break;
+      }
+    });
+    condominio = (condominio) ? condominio : 0
+    valor = (valor) ? valor.match(/\d+[.]\d+|\d+/gm)[0] : 0
+    const total = Number(condominio) + Number(valor.replace('.', ''));
+
+    if (total < filter) {
+      toObject({
+        descricao,
+        Qtd_Quartos: (quartos) ? quartos[0] : undefined,
+        tamanho: (tamanho) ? tamanho[0] : undefined,
+        vagas: (vagas) ? vagas[0] : undefined,
+        localizacao: (localizacao) ? localizacao[0] : undefined,
+        condominio: 'R$ ' + condominio,
+        aluguel: valor,
+        Valor_Total: 'R$ ' + total,
+        link
+      }, 'olx')
+    } 
+  })
+}
+
+const generateHtml = (site, data) => {
+  const table = jsonToTableHtmlString(data);
+  const html = `
+    <!DOCTYPE html>
+    <html lang="pt-br" data-vue-meta-server-rendered="">
+      <body>
+        ${table}  
+      </body>
+    </html>`
+
+  fs.writeFile(`${site}.html`, html, async (err) => {
+    if (err) console.log(err);
+    console.log(`DADOS DO ${site} COLETADOS!`);
+  });
+}
+
+const goThroughtPages = async (url, page, pageNumber, site, filter) => {
+  switch (site) {
+    case 'olx' : {
+      const olxUrl = url.replace(/[?]/gm, `?o=${pageNumber}&`)
+      await page.goto(`${olxUrl}`);
+      const html = await page.$eval('body', e => e.outerHTML);
+      const $ = cheerio.load(html, { decodeEntities: false });
+
+      await olxScraper($, filter);
+
+      console.log('Olx Página ', pageNumber);
+      let lastPage = false; 
+      $('.module_pagination ').find('li').each((index, elem ) => {
+        if (elem.attribs.class === 'item first') lastPage = true;
+        else lastPage = false;
+      });
+      if (lastPage) return true;
+      return await goThroughtPages(url, page, pageNumber + 1, 'olx', filter);
+    }
+
+    case 'zap': {
+      const zapUrl = url.replace(/[?]/gm, `?pagina=${pageNumber}&`)
+      await page.goto(`${zapUrl}`);
+      const html = await page.$eval('body', e => e.outerHTML);
+      const $ = cheerio.load(html, { decodeEntities: false });
+
+      await zapScraper($, pageNumber, filter);
+
+      console.log('Zap Imóveis Página ', pageNumber);
+      if ($('#app').find('.pagination__message').text()) {
+        return true;
+      }
+      return await goThroughtPages(url, page, pageNumber + 1, 'zap', filter);
+    }
+    
+    default: break;
+  }
+  return false;
 }
 
 const bootstrap = async () => {
   const browser = await puppeteer.launch();
-  const page = await browser.newPage();
-  page.setViewport({ width: 1300, height: 600 });
-  let pageNumber = 1;
+  const zapPage = await browser.newPage();
+  const olxPage = await browser.newPage();
+  zapPage.setViewport({ width: 1300, height: 600 });
 
   await rl.question('Insira o valor máximo desejado: ', async (filter) => {
-    while (true) {
-      await page.goto(`https://www.zapimoveis.com.br/aluguel/imoveis/pr+londrina/2-quartos/?onde=,Paran%C3%A1,Londrina,,,,BR%3EParana%3ENULL%3ELondrina,-23.304452,-51.169582&quartos=2&transacao=Aluguel&precoMaximo=1000&tipo=Im%C3%B3vel%20usado&pagina=${pageNumber}&__zt=ranking%3Azap`);
-      const html = await page.$eval('body', e => e.outerHTML);
-      $ = cheerio.load(html, { decodeEntities: false });
+    const olxUrl = 'https://pr.olx.com.br/regiao-de-londrina/regiao-de-londrina/imoveis/aluguel?pe=1500&ros=2'
+    const zapUrl = 'https://www.zapimoveis.com.br/aluguel/imoveis/pr+londrina/2-quartos/?onde=,Paran%C3%A1,Londrina,,,,BR%3EParana%3ENULL%3ELondrina,-23.304452,-51.169582&quartos=2&transacao=Aluguel&precoMaximo=1000&tipo=Im%C3%B3vel%20usado&__zt=ranking%3Azap'
 
-      await scraper($, pageNumber, filter);
-
-      console.log('Página: ', pageNumber);
-      if (!$('#app').find('.pagination__message').text()) pageNumber++;
-      else break;
-    }
-
-    const table = jsonToTableHtmlString(data);
-    const html = `
-      <!DOCTYPE html>
-      <html lang="pt-br" data-vue-meta-server-rendered="">
-        <body>
-          ${table}  
-        </body>
-      </html>`
-
-    fs.writeFile('result.html', html, async (err) => {
-      if (err) console.log(err);
-      console.log('Dados Coletados!');
-      await browser.close();
-      rl.close();
-    });
+    if (await goThroughtPages(zapUrl, zapPage, 1, 'zap', filter)) await generateHtml('ZAP', zapData);
+    if (await goThroughtPages(olxUrl, olxPage, 1, 'olx', filter)) await generateHtml('OLX', olxData);
+    await browser.close();
+    rl.close();
   });
 }
 

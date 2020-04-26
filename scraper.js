@@ -156,6 +156,7 @@ const olxScraper = ($, filter) => {
 const generateHtml = async (site, data) => {
   await data.sort((a, b) => Number(a.aluguel.replace('.', '')) - Number(b.aluguel.replace('.', '')))
   const table = jsonToTableHtmlString(data);
+
   const html = `
     <!DOCTYPE html>
     <html lang="pt-br" data-vue-meta-server-rendered="">
@@ -187,6 +188,7 @@ const goThroughtPages = async (url, page, pageNumber, site, filter) => {
         && $(elem).find('a')[0].attribs['data-lurker-detail'] === 'first_page') lastPage = true;
         else lastPage = false;
       });
+
       if (lastPage) return true;
       return await goThroughtPages(url, page, pageNumber + 1, 'olx', filter);
     }

@@ -106,12 +106,12 @@ const zapScraper = ($, page, filter) => {
 const olxScraper = ($, filter) => {
   let link, valor, descricao, quartos, tamanho, vagas, condominio, localizacao = undefined;
 
-  $('#main-ad-list').find('li').each((index, elem) => {
+  $('.sc-1fcmfeb-1 iptkoI').find('li').each((index, elem) => {
     link = ($(elem).find('a')[0]) ? $(elem).find('a')[0].attribs.href : undefined;
 
     $(elem).find('div').each((index, elem2) => {
       switch (elem2.attribs.class) {
-        case 'col-2':
+        case 'fnmrjs-8 kRlFBv':
           descricao = valueFilter('type', $(elem2).find('h2').text(), 'olx');
           let apAttributes = valueFilter('type', $(elem2).find('p').text(), 'olx');
           apAttributes = apAttributes.split('|');
@@ -120,13 +120,16 @@ const olxScraper = ($, filter) => {
             if (value.includes('m²')) tamanho = value.match(/.*m²/gm);
             if (value.includes('vaga')) vagas = value.match(/.*vagas/gm);
             if (value.includes('R$')) condominio = value.match(/\d+/gm);
-            if (value.includes('Londrina')) localizacao = value.match(/Londrina.*/gm);
           })
           break;
   
-        case 'col-3 ':
-          valor = valueFilter('type', $(elem2).find('.OLXad-list-price').text(), 'olx');
+        case 'fnmrjs-15 clbSMi':
+          valor = valueFilter('type', $(elem2).find('.fnmrjs-16 jqSHIm').text(), 'olx');
           break;
+        
+        case 'fnmrjs-21 bktOWr':
+          value = $(elem2).find('p').text(); 
+          if (value.includes('Londrina')) localizacao = value.match(/Londrina.*/gm);
         default: break;
       }
     });
@@ -150,8 +153,10 @@ const olxScraper = ($, filter) => {
   })
 }
 
-const generateHtml = (site, data) => {
+const generateHtml = async (site, data) => {
+  await data.sort((a, b) => a.total.match(/\d.*/gm) - b.total.match(/\d.*/gm));
   const table = jsonToTableHtmlString(data);
+
   const html = `
     <!DOCTYPE html>
     <html lang="pt-br" data-vue-meta-server-rendered="">
@@ -178,10 +183,12 @@ const goThroughtPages = async (url, page, pageNumber, site, filter) => {
 
       console.log('Olx Página ', pageNumber);
       let lastPage = false; 
-      $('.module_pagination ').find('li').each((index, elem ) => {
-        if (elem.attribs.class === 'item first') lastPage = true;
+      $('.sc-1m4ygug-4 cXxSMf').find('li').map((index, elem ) => {
+        console.log(elem);
+        if($(elem).find('a').text() === 'Primeira pagina') lastPage = true;
         else lastPage = false;
       });
+
       if (lastPage) return true;
       return await goThroughtPages(url, page, pageNumber + 1, 'olx', filter);
     }
@@ -216,7 +223,7 @@ const bootstrap = async () => {
     const olxUrl = 'https://pr.olx.com.br/regiao-de-londrina/regiao-de-londrina/imoveis/aluguel?pe=1500&ros=2'
     const zapUrl = 'https://www.zapimoveis.com.br/aluguel/imoveis/pr+londrina/2-quartos/?onde=,Paran%C3%A1,Londrina,,,,BR%3EParana%3ENULL%3ELondrina,-23.304452,-51.169582&quartos=2&transacao=Aluguel&precoMaximo=1000&tipo=Im%C3%B3vel%20usado&__zt=ranking%3Azap'
 
-    if (await goThroughtPages(zapUrl, zapPage, 1, 'zap', filter)) await generateHtml('ZAP', zapData);
+    // if (await goThroughtPages(zapUrl, zapPage, 1, 'zap', filter)) await generateHtml('ZAP', zapData);
     if (await goThroughtPages(olxUrl, olxPage, 1, 'olx', filter)) await generateHtml('OLX', olxData);
     await browser.close();
     rl.close();
